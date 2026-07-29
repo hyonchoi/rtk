@@ -46,7 +46,15 @@ enum RewriteOutcome {
 
 fn evaluate(cmd: &str, excluded: &[String], transparent_prefixes: &[String]) -> RewriteOutcome {
     let verdict = check_command(cmd);
+    evaluate_with_verdict(cmd, excluded, transparent_prefixes, verdict)
+}
 
+fn evaluate_with_verdict(
+    cmd: &str,
+    excluded: &[String],
+    transparent_prefixes: &[String],
+    verdict: PermissionVerdict,
+) -> RewriteOutcome {
     if verdict == PermissionVerdict::Deny {
         return RewriteOutcome::Deny;
     }
@@ -91,12 +99,17 @@ mod tests {
     }
 
     mod unattestable_passthrough {
-        use super::super::{evaluate, RewriteOutcome};
+        use super::super::{evaluate_with_verdict, RewriteOutcome};
+        use crate::hooks::permissions::PermissionVerdict;
+
+        fn evaluate_default(cmd: &str) -> RewriteOutcome {
+            evaluate_with_verdict(cmd, &[], &[], PermissionVerdict::Default)
+        }
 
         #[test]
         fn test_backtick_substitution_passthrough() {
             assert_eq!(
-                evaluate("git status `rm -rf /tmp/x`", &[], &[]),
+                evaluate_default("git status `rm -rf /tmp/x`"),
                 RewriteOutcome::Passthrough
             );
         }
@@ -104,7 +117,7 @@ mod tests {
         #[test]
         fn test_dollar_substitution_passthrough() {
             assert_eq!(
-                evaluate("git status $(rm -rf /tmp/x)", &[], &[]),
+                evaluate_default("git status $(rm -rf /tmp/x)"),
                 RewriteOutcome::Passthrough
             );
         }
@@ -112,7 +125,7 @@ mod tests {
         #[test]
         fn test_double_quoted_substitution_passthrough() {
             assert_eq!(
-                evaluate("git log --pretty=\"$(rm -rf /tmp/x)\"", &[], &[]),
+                evaluate_default("git log --pretty=\"$(rm -rf /tmp/x)\""),
                 RewriteOutcome::Passthrough
             );
         }
@@ -120,7 +133,7 @@ mod tests {
         #[test]
         fn test_file_redirect_passthrough() {
             assert_eq!(
-                evaluate("git log > /tmp/out.txt", &[], &[]),
+                evaluate_default("git log > /tmp/out.txt"),
                 RewriteOutcome::Passthrough
             );
         }
@@ -128,7 +141,7 @@ mod tests {
         #[test]
         fn test_fd_dup_redirect_still_rewrites() {
             assert!(matches!(
-                evaluate("git status 2>&1", &[], &[]),
+                evaluate_default("git status 2>&1"),
                 RewriteOutcome::Ask(_)
             ));
         }
@@ -136,7 +149,7 @@ mod tests {
         #[test]
         fn test_plain_command_still_rewrites() {
             assert!(matches!(
-                evaluate("git status", &[], &[]),
+                evaluate_default("git status"),
                 RewriteOutcome::Ask(_)
             ));
         }

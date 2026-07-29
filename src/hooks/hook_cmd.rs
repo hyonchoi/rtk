@@ -164,6 +164,60 @@ fn decide_hook_action(cmd: &str, host: permissions::Host) -> HookDecision {
     decide_from_verdict(cmd, permissions::check_command_for(cmd, host))
 }
 
+fn is_already_rtk_command(cmd: &str) -> bool {
+    let trimmed = cmd.trim();
+    trimmed == "rtk" || trimmed.starts_with("rtk ")
+}
+
+fn passthrough_command_name(cmd: &str) -> Option<String> {
+    let parts = crate::discover::lexer::shell_split(cmd);
+    for part in parts {
+        if part.contains('=') && !part.starts_with('-') {
+            let mut split = part.splitn(2, '=');
+            let key = split.next().unwrap_or_default();
+            if !key.is_empty()
+                && key.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+                && !key.chars().next().is_some_and(|c| c.is_ascii_digit())
+            {
+                continue;
+            }
+        }
+        return Some(part);
+    }
+    None
+}
+
+fn is_safe_codex_passthrough_segment(segment: &str) -> bool {
+    if crate::discover::lexer::contains_unattestable_construct(segment) {
+        return false;
+    }
+
+    matches!(
+        passthrough_command_name(segment).as_deref(),
+        Some("echo" | "pwd" | "true" | "false" | "printf" | ":")
+    )
+}
+
+fn codex_rewrite_if_safe_to_allow(cmd: &str) -> Option<String> {
+    if crate::discover::lexer::contains_unattestable_construct(cmd) {
+        return None;
+    }
+
+    let rewritten = get_rewritten(cmd)?;
+    let segments = crate::discover::lexer::split_for_permissions(cmd);
+    if segments.is_empty() {
+        return None;
+    }
+
+    let safe_to_allow = segments.iter().all(|segment| {
+        is_already_rtk_command(segment)
+            || get_rewritten(segment).is_some()
+            || is_safe_codex_passthrough_segment(segment)
+    });
+
+    safe_to_allow.then_some(rewritten)
+}
+
 fn handle_vscode(cmd: &str) -> Result<()> {
     let (decision, rewritten) = match decide_hook_action(cmd, permissions::Host::Claude) {
         HookDecision::Deny => {
@@ -388,6 +442,49 @@ enum PayloadAction {
 }
 
 fn process_claude_payload(v: &Value) -> PayloadAction {
+    process_tool_input_command_payload(v, false)
+}
+
+fn process_codex_payload(v: &Value) -> PayloadAction {
+    let cmd = match v
+        .pointer("/tool_input/command")
+        .and_then(|c| c.as_str())
+        .filter(|c| !c.is_empty())
+    {
+        Some(c) => c,
+        None => return PayloadAction::Ignore,
+    };
+
+    let Some(rewritten) = codex_rewrite_if_safe_to_allow(cmd) else {
+        return PayloadAction::Skip {
+            reason: "skip:codex_unsafe_partial",
+            cmd: cmd.to_string(),
+        };
+    };
+
+    let updated_input = {
+        let mut ti = v.get("tool_input").cloned().unwrap_or_else(|| json!({}));
+        if let Some(obj) = ti.as_object_mut() {
+            obj.insert("command".into(), Value::String(rewritten.clone()));
+        }
+        ti
+    };
+
+    PayloadAction::Rewrite {
+        cmd: cmd.to_string(),
+        rewritten,
+        output: json!({
+            "hookSpecificOutput": {
+                "hookEventName": PRE_TOOL_USE_KEY,
+                "permissionDecisionReason": "RTK auto-rewrite",
+                "updatedInput": updated_input,
+                "permissionDecision": "allow"
+            }
+        }),
+    }
+}
+
+fn process_tool_input_command_payload(v: &Value, force_allow_decision: bool) -> PayloadAction {
     let cmd = match v
         .pointer("/tool_input/command")
         .and_then(|c| c.as_str())
@@ -428,7 +525,7 @@ fn process_claude_payload(v: &Value) -> PayloadAction {
         "updatedInput": updated_input
     });
 
-    if allow {
+    if allow || force_allow_decision {
         hook_output
             .as_object_mut()
             .unwrap()
@@ -481,6 +578,50 @@ pub fn run_claude() -> Result<()> {
 fn run_claude_inner(input: &str) -> Option<String> {
     let v: Value = serde_json::from_str(input).ok()?;
     match process_claude_payload(&v) {
+        PayloadAction::Rewrite { output, .. } => Some(output.to_string()),
+        _ => None,
+    }
+}
+
+/// Run the Codex PreToolUse hook natively.
+pub fn run_codex() -> Result<()> {
+    let input = read_stdin_limited()?;
+
+    let input = input.trim();
+    if input.is_empty() {
+        return Ok(());
+    }
+
+    let v: Value = match serde_json::from_str(input) {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(io::stderr(), "[rtk hook] Failed to parse JSON input: {e}");
+            return Ok(());
+        }
+    };
+
+    match process_codex_payload(&v) {
+        PayloadAction::Rewrite {
+            cmd,
+            rewritten,
+            output,
+        } => {
+            audit_log("rewrite", &cmd, &rewritten);
+            let _ = writeln!(io::stdout(), "{output}");
+        }
+        PayloadAction::Skip { reason, cmd } => {
+            audit_log(reason, &cmd, "");
+        }
+        PayloadAction::Ignore => {}
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+fn run_codex_inner(input: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(input).ok()?;
+    match process_codex_payload(&v) {
         PayloadAction::Rewrite { output, .. } => Some(output.to_string()),
         _ => None,
     }
@@ -1293,6 +1434,53 @@ mod tests {
         assert_eq!(hook["permissionDecisionReason"], "RTK auto-rewrite");
         assert!(hook["updatedInput"].is_object());
         assert!(hook["updatedInput"]["command"].is_string());
+    }
+
+    #[test]
+    fn test_codex_rewrite_sets_allow_permission_decision() {
+        let result = run_codex_inner(&claude_input("git status")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+        let hook = &v["hookSpecificOutput"];
+
+        assert_eq!(hook["hookEventName"], PRE_TOOL_USE_KEY);
+        assert_eq!(hook["permissionDecision"], "allow");
+        assert_eq!(hook["permissionDecisionReason"], "RTK auto-rewrite");
+        assert_eq!(hook["updatedInput"]["command"], "rtk git status");
+    }
+
+    #[test]
+    fn test_codex_never_emits_ask_permission_decision() {
+        let result = run_codex_inner(&claude_input("cargo test")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+
+        assert_ne!(
+            v.pointer("/hookSpecificOutput/permissionDecision"),
+            Some(&json!("ask"))
+        );
+        assert_eq!(
+            v.pointer("/hookSpecificOutput/permissionDecision"),
+            Some(&json!("allow"))
+        );
+    }
+
+    #[test]
+    fn test_codex_allows_partial_rewrite_with_safe_passthrough_segment() {
+        let result = run_codex_inner(&claude_input("git status && echo hi")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(
+            v.pointer("/hookSpecificOutput/permissionDecision"),
+            Some(&json!("allow"))
+        );
+        assert_eq!(
+            v.pointer("/hookSpecificOutput/updatedInput/command"),
+            Some(&json!("rtk git status && echo hi"))
+        );
+    }
+
+    #[test]
+    fn test_codex_skips_partial_rewrite_with_unsafe_passthrough_segment() {
+        assert!(run_codex_inner(&claude_input("git status && rm -rf /tmp/x")).is_none());
     }
 
     #[test]

@@ -38,9 +38,9 @@ Agent runs "cargo test"
 | Pi | TypeScript extension (`tool_call` event) | Yes |
 | Hermes | Python plugin (`terminal` command mutation) | Yes |
 | Factory Droid | Shell hook (`PreToolUse`, matcher `Execute`) | Yes |
+| Codex CLI | Shell hook (`PreToolUse`) | Yes |
 | Cline / Roo Code | Rules file (prompt-level) | N/A |
 | Windsurf | Rules file (prompt-level) | N/A |
-| Codex CLI | AGENTS.md instructions | N/A |
 | Kilo Code | Rules file (prompt-level) | N/A |
 | Google Antigravity | Rules file (prompt-level) | N/A |
 | Mistral Vibe | Planned ([#800](https://github.com/rtk-ai/rtk/issues/800)) | Pending upstream |
@@ -175,9 +175,11 @@ rtk init --global --agent windsurf    # creates .windsurfrules in current projec
 ### Codex CLI
 
 ```bash
-rtk init --codex           # project-scoped (AGENTS.md)
-rtk init --global --codex  # user-global (~/.codex/AGENTS.md)
+rtk init --codex           # project-scoped (.codex/hooks.json + AGENTS.md)
+rtk init --global --codex  # user-global (~/.codex/hooks.json + AGENTS.md)
 ```
+
+Codex mode installs a `PreToolUse` hook (`rtk hook codex`) and adds the RTK awareness document through `AGENTS.md` / `RTK.md`.
 
 ### Kilo Code
 
