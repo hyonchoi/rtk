@@ -4,17 +4,17 @@
 
 **Goal:** Add and run a manually dispatched GitHub Actions workflow that builds RTK packages for seven platform/package targets without invoking upstream release automation.
 
-**Architecture:** A standalone `.github/workflows/build-binaries.yml` copies the proven build and packaging jobs from the existing reusable release workflow but stops after artifact upload. The workflow is committed on the feature branch, copied to `develop` through a targeted cherry-pick, and dispatched against `feat/codex-hook`.
+**Architecture:** A standalone `.github/workflows/build-binaries.yml` copies the proven build and packaging jobs from the existing reusable release workflow but stops after artifact upload. The workflow is committed on the feature branch, copied to `develop` through a targeted cherry-pick, and dispatched from `develop` with `source_ref` set to the branch, tag, or SHA to build.
 
 **Tech Stack:** GitHub Actions, Rust stable toolchain, Cargo, cargo-deb, cargo-generate-rpm, GitHub CLI
 
 ## Global Constraints
 
 - The workflow must be manually dispatched with `workflow_dispatch`.
-- The operator selects the source revision through GitHub's branch selector or `gh workflow run --ref`.
+- The operator dispatches from a ref containing the workflow and selects the source revision through the required `source_ref` input.
 - Build `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`, Debian, and RPM artifacts.
 - Use read-only repository permissions.
-- Do not create or move tags, create a GitHub Release, update `latest`, notify Discord, update Homebrew, or require upstream GitHub App secrets.
+- Do not create or move tags, create a GitHub Release, update `latest`, notify Discord, update Homebrew, or expose repository secrets to the selected source revision.
 - Use `fail-fast: false` for the target matrix.
 - Prefix repository shell commands with `rtk`.
 
@@ -26,7 +26,7 @@
 - Create: `.github/workflows/build-binaries.yml`
 
 **Interfaces:**
-- Consumes: GitHub's selected workflow ref, repository variable `RTK_TELEMETRY_URL`, and optional secret `RTK_TELEMETRY_TOKEN`.
+- Consumes: required workflow input `source_ref` and repository variable `RTK_TELEMETRY_URL`.
 - Produces: GitHub Actions artifacts named `rtk-<rust-target>`, `rtk-deb`, and `rtk-rpm`.
 
 - [ ] **Step 1: Create the workflow**
@@ -36,6 +36,10 @@ Create a `Build Fork Binaries` workflow with:
 ```yaml
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or SHA to build
+        required: true
 
 permissions:
   contents: read
@@ -138,7 +142,7 @@ Expected: `origin/develop` advances to the workflow commit.
 Run:
 
 ```bash
-rtk gh workflow run build-binaries.yml --ref feat/codex-hook
+rtk gh workflow run build-binaries.yml --ref develop -f source_ref=feat/codex-hook
 ```
 
 Expected: GitHub accepts the dispatch.
@@ -148,7 +152,7 @@ Expected: GitHub accepts the dispatch.
 Run:
 
 ```bash
-FORK_BUILD_RUN_ID=$(rtk gh run list --workflow build-binaries.yml --branch feat/codex-hook --limit 1 --json databaseId --jq '.[0].databaseId')
+FORK_BUILD_RUN_ID=$(rtk gh run list --workflow build-binaries.yml --branch develop --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
 test -n "$FORK_BUILD_RUN_ID"
 ```
 
