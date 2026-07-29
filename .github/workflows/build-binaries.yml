@@ -15,8 +15,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  resolve-source:
+    name: Resolve source revision
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+    steps:
+      - name: Resolve source_ref
+        id: resolve
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          git init source
+          cd source
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --depth=1 origin "$SOURCE_REF"
+          SOURCE_SHA=$(git rev-parse FETCH_HEAD)
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "$SOURCE_SHA"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: resolve-source
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -47,7 +67,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.resolve-source.outputs.source_sha }}
           persist-credentials: false
 
       - name: Record source revision
@@ -100,12 +120,13 @@ jobs:
 
   build-deb:
     name: Build DEB package
+    needs: resolve-source
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.resolve-source.outputs.source_sha }}
           persist-credentials: false
 
       - name: Record source revision
@@ -131,6 +152,7 @@ jobs:
 
   build-rpm:
     name: Build RPM package
+    needs: resolve-source
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
@@ -141,7 +163,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.resolve-source.outputs.source_sha }}
           persist-credentials: false
 
       - name: Record source revision

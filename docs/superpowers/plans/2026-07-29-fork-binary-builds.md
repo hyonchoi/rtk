@@ -4,7 +4,7 @@
 
 **Goal:** Add and run a manually dispatched GitHub Actions workflow that builds RTK packages for seven platform/package targets without invoking upstream release automation.
 
-**Architecture:** A standalone `.github/workflows/build-binaries.yml` copies the proven build and packaging jobs from the existing reusable release workflow but stops after artifact upload. The workflow is committed on the feature branch, copied to `develop` through a targeted cherry-pick, and dispatched against `feat/codex-hook`.
+**Architecture:** A standalone `.github/workflows/build-binaries.yml` copies the proven build and packaging jobs from the existing reusable release workflow but stops after artifact upload. The workflow is committed on the feature branch, copied to `develop` as a workflow-only file update, and dispatched against `feat/codex-hook`.
 
 **Tech Stack:** GitHub Actions, Rust stable toolchain, Cargo, cargo-deb, cargo-generate-rpm, GitHub CLI
 
@@ -48,7 +48,9 @@ permissions:
 
 Copy the existing release workflow's `build`, `build-deb`, and `build-rpm`
 jobs, including target setup, release builds, archive creation, and
-`actions/upload-artifact@v4`. Omit the `release`, `notify-discord`, and
+`actions/upload-artifact@v4`. Add a `resolve-source` job that resolves
+`source_ref` once to an immutable SHA, then have every build and package job
+checkout that resolved SHA. Omit the `release`, `notify-discord`, and
 `homebrew` jobs.
 
 - [ ] **Step 2: Check workflow structure**
@@ -56,13 +58,14 @@ jobs, including target setup, release builds, archive creation, and
 Run:
 
 ```bash
-rtk rg -n "workflow_dispatch|source_ref|contents: read|persist-credentials: false|target:|Upload artifact|Upload DEB|Upload RPM|RTK_TELEMETRY_TOKEN|action-gh-release|create-github-app-token" .github/workflows/build-binaries.yml
+rtk rg -n "workflow_dispatch|source_ref|contents: read|resolve-source|source_sha|persist-credentials: false|target:|Upload artifact|Upload DEB|Upload RPM|RTK_TELEMETRY_TOKEN|action-gh-release|create-github-app-token" .github/workflows/build-binaries.yml
 ```
 
 Expected: the trigger, required `source_ref` input, read permission, five Rust
-targets, and three upload step names are present; `action-gh-release`,
-`create-github-app-token`, and `RTK_TELEMETRY_TOKEN` are absent; every checkout
-uses `persist-credentials: false`.
+targets, one source-resolution job, and three upload step names are present;
+`action-gh-release`, `create-github-app-token`, and `RTK_TELEMETRY_TOKEN` are
+absent; every checkout uses the resolved `source_sha` with
+`persist-credentials: false`.
 
 - [ ] **Step 3: Parse the workflow**
 
@@ -99,29 +102,29 @@ rtk git commit -m "Add fork binary build workflow"
 Run:
 
 ```bash
-FORK_WORKFLOW_COMMIT=$(rtk git log --format=%H --max-count=1 -- .github/workflows/build-binaries.yml)
-test -n "$FORK_WORKFLOW_COMMIT"
+FORK_WORKFLOW_SOURCE=$(rtk git rev-parse HEAD:.github/workflows/build-binaries.yml)
+test -n "$FORK_WORKFLOW_SOURCE"
 rtk git status --short --branch
 rtk git fetch origin develop
 ```
 
-Expected: the workflow-specific commit is recorded and `origin/develop` is
-available. If later hardening changes also modify `.github/workflows/build-binaries.yml`,
-record that latest workflow commit instead of assuming the current branch `HEAD`
-is workflow-only.
+Expected: the workflow blob is recorded and `origin/develop` is available.
 
-- [ ] **Step 2: Update local develop and cherry-pick the workflow commit**
+- [ ] **Step 2: Update local develop and copy only the workflow**
 
 Run:
 
 ```bash
 rtk git switch develop
 rtk git merge --ff-only origin/develop
-rtk git cherry-pick "$FORK_WORKFLOW_COMMIT"
+rtk git restore --source feat/codex-hook -- .github/workflows/build-binaries.yml
+test "$(rtk git hash-object .github/workflows/build-binaries.yml)" = "$FORK_WORKFLOW_SOURCE"
+rtk git add .github/workflows/build-binaries.yml
+rtk git commit -m "Harden fork binary build workflow"
 ```
 
-Expected: `develop` receives only the workflow commit, without the feature
-implementation or design documents.
+Expected: `develop` receives only `.github/workflows/build-binaries.yml`,
+without the implementation plan or design document.
 
 - [ ] **Step 3: Push the default branch**
 
@@ -181,6 +184,7 @@ Run:
 ```bash
 rtk gh run watch "$FORK_BUILD_RUN_ID" --exit-status
 rtk gh run view "$FORK_BUILD_RUN_ID" --json jobs,headBranch,headSha,conclusion
+rtk gh run view "$FORK_BUILD_RUN_ID" --log | rtk grep -n "Resolve source_ref|Record source revision|source_sha|HEAD is now at"
 rtk gh run download "$FORK_BUILD_RUN_ID" --dir /tmp/rtk-fork-build-artifacts
 rtk find /tmp/rtk-fork-build-artifacts -maxdepth 2 -type f
 ```

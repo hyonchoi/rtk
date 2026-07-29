@@ -11,7 +11,8 @@ upstream release process.
 Add `.github/workflows/build-binaries.yml` with a `workflow_dispatch` trigger
 and a required `source_ref` input. The operator dispatches from a branch that
 contains the workflow, then selects the branch, tag, or commit to build through
-`source_ref`.
+`source_ref`. The workflow resolves that input once to an immutable commit SHA,
+then every build and package job checks out the resolved SHA.
 
 The workflow uses the same target matrix and packaging conventions as
 `.github/workflows/release.yml`:
@@ -24,7 +25,7 @@ The workflow uses the same target matrix and packaging conventions as
 - Debian package
 - RPM package
 
-Each matrix job checks out the selected revision, installs the required Rust
+Each matrix job checks out the resolved revision, installs the required Rust
 target and native cross-compilation tools, builds in release mode, packages the
 binary, and uploads it with `actions/upload-artifact`.
 
