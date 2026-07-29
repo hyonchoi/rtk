@@ -167,7 +167,9 @@ jobs:
           persist-credentials: false
 
       - name: Record source revision
-        run: git rev-parse HEAD
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse HEAD
 
       - name: Install dependencies
         run: |
