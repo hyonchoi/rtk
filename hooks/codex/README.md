@@ -4,6 +4,8 @@
 
 ## Specifics
 
-- Prompt-level guidance via awareness document -- no programmatic hook
+- Native `PreToolUse` hook via `rtk hook codex`
+- Rewrites use Codex's `permissionDecision: "allow"` + `updatedInput` shape
 - `rtk-awareness.md` is injected into `AGENTS.md` with an `@RTK.md` reference
-- Installed to `$CODEX_HOME` when set, otherwise `~/.codex/`, by `rtk init --codex`
+- Global installs go to `$CODEX_HOME` when set, otherwise `~/.codex/`
+- Project installs write the hook to `.codex/hooks.json` and awareness files to `AGENTS.md` / `RTK.md`

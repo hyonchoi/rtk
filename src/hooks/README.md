@@ -28,7 +28,7 @@ LLM agent integration layer that installs, validates, and executes command-rewri
 | Claude-MD (legacy) | `rtk init --claude-md` | 134-line RTK block | CLAUDE.md |
 | Windsurf | `rtk init -g --agent windsurf` | `.windsurfrules` | -- |
 | Cline | `rtk init --agent cline` | `.clinerules` | -- |
-| Codex | `rtk init --codex` | RTK.md in `$CODEX_HOME` or `~/.codex` | AGENTS.md |
+| Codex | `rtk init --codex` | Codex hook + RTK.md | `.codex/hooks.json` or `$CODEX_HOME/hooks.json`, AGENTS.md |
 | Cursor | `rtk init -g --agent cursor` | Cursor hook | hooks.json |
 | Pi | `rtk init --agent pi` | `.pi/extensions/rtk.ts` | -- |
 | Hermes | `rtk init --agent hermes` | Python plugin in `~/.hermes/plugins/rtk-rewrite/` | `config.yaml` `plugins.enabled` |
@@ -88,6 +88,7 @@ Rules are loaded from all Claude Code `settings.json` files (project + global, i
 | Copilot VS Code (rtk hook copilot) | Yes | `permissionDecision: "ask"` — user prompted |
 | Cursor (rtk hook cursor) | Ready | `permission: "ask",` — users will be prompted when Cursor enforces the permission; in the meantime, allow |
 | Gemini CLI (rtk hook gemini) | No (allow/deny only) | allow (limitation — no ask mode in Gemini) |
+| Codex CLI (rtk hook codex) | No (`ask` unsupported) | allow with `updatedInput` |
 | Copilot CLI (rtk hook copilot) | No updatedInput | deny-with-suggestion (unchanged) |
 | Codex | ask parsed but no-op | allow (limitation — fails open) |
 

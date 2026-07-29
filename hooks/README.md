@@ -52,9 +52,9 @@ Each agent subdirectory has its own README with hook-specific details:
 | GitHub Copilot CLI | Rust binary (`rtk hook copilot`) | Deny-with-suggestion | No (agent retries) |
 | Cursor | Rust binary | Transparent rewrite | Yes (`updated_input`) |
 | Gemini CLI | Rust binary (`rtk hook gemini`) | Transparent rewrite | Yes (`hookSpecificOutput`) |
+| Codex CLI | Rust binary (`rtk hook codex`) | Transparent rewrite | Yes (`updatedInput`) |
 | Cline / Roo Code | Custom instructions (rules file) | Prompt-level guidance | N/A |
 | Windsurf | Custom instructions (rules file) | Prompt-level guidance | N/A |
-| Codex CLI | AGENTS.md / instructions | Prompt-level guidance | N/A |
 | OpenCode | TypeScript plugin (`tool.execute.before`) | In-place mutation | Yes |
 | Pi | TypeScript extension (`tool_call` event) | In-place mutation | Yes |
 | Hermes | Python plugin (`pre_tool_call`) | In-place mutation | Yes |
