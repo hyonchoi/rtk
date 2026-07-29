@@ -11,10 +11,10 @@
 ## Global Constraints
 
 - The workflow must be manually dispatched with `workflow_dispatch`.
-- The operator selects the source revision through GitHub's branch selector or `gh workflow run --ref`.
+- The operator dispatches from a branch that contains the workflow, then selects the source revision through the required `source_ref` input.
 - Build `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`, Debian, and RPM artifacts.
 - Use read-only repository permissions.
-- Do not create or move tags, create a GitHub Release, update `latest`, notify Discord, update Homebrew, or require upstream GitHub App secrets.
+- Do not create or move tags, create a GitHub Release, update `latest`, notify Discord, update Homebrew, or expose repository secrets to the selected source revision.
 - Use `fail-fast: false` for the target matrix.
 - Prefix repository shell commands with `rtk`.
 
@@ -26,7 +26,7 @@
 - Create: `.github/workflows/build-binaries.yml`
 
 **Interfaces:**
-- Consumes: GitHub's selected workflow ref, repository variable `RTK_TELEMETRY_URL`, and optional secret `RTK_TELEMETRY_TOKEN`.
+- Consumes: the required `source_ref` workflow input and the optional repository variable `RTK_TELEMETRY_URL`.
 - Produces: GitHub Actions artifacts named `rtk-<rust-target>`, `rtk-deb`, and `rtk-rpm`.
 
 - [ ] **Step 1: Create the workflow**
@@ -36,6 +36,11 @@ Create a `Build Fork Binaries` workflow with:
 ```yaml
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit SHA to build
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -51,12 +56,12 @@ jobs, including target setup, release builds, archive creation, and
 Run:
 
 ```bash
-rtk rg -n "workflow_dispatch|contents: read|target:|Upload artifact|Upload DEB|Upload RPM|action-gh-release|create-github-app-token" .github/workflows/build-binaries.yml
+rtk rg -n "workflow_dispatch|source_ref|contents: read|target:|Upload artifact|Upload DEB|Upload RPM|RTK_TELEMETRY_TOKEN|action-gh-release|create-github-app-token" .github/workflows/build-binaries.yml
 ```
 
-Expected: the trigger, read permission, five Rust targets, and three upload
-step names are present; `action-gh-release` and `create-github-app-token` are
-absent.
+Expected: the trigger, required `source_ref` input, read permission, five Rust
+targets, and three upload step names are present; `action-gh-release`,
+`create-github-app-token`, and `RTK_TELEMETRY_TOKEN` are absent.
 
 - [ ] **Step 3: Parse the workflow**
 
@@ -130,7 +135,7 @@ Expected: `origin/develop` advances to the workflow commit.
 - No file changes
 
 **Interfaces:**
-- Consumes: `build-binaries.yml` from the default branch and source ref `feat/codex-hook`.
+- Consumes: `build-binaries.yml` from the dispatch branch and source ref `feat/codex-hook`.
 - Produces: a GitHub Actions run with five target jobs, one DEB job, and one RPM job.
 
 - [ ] **Step 1: Dispatch the workflow**
@@ -138,10 +143,11 @@ Expected: `origin/develop` advances to the workflow commit.
 Run:
 
 ```bash
-rtk gh workflow run build-binaries.yml --ref feat/codex-hook
+rtk gh workflow run build-binaries.yml --ref develop -f source_ref=feat/codex-hook
 ```
 
-Expected: GitHub accepts the dispatch.
+Expected: GitHub accepts the dispatch. Dispatching with
+`--ref feat/codex-hook` fails unless that ref already contains the workflow.
 
 - [ ] **Step 2: Resolve the new run**
 
@@ -152,7 +158,7 @@ FORK_BUILD_RUN_ID=$(rtk gh run list --workflow build-binaries.yml --branch feat/
 test -n "$FORK_BUILD_RUN_ID"
 ```
 
-Expected: one new `workflow_dispatch` run appears.
+Expected: one new `workflow_dispatch` run appears for the dispatch branch.
 
 - [ ] **Step 3: Verify job scheduling**
 
@@ -164,7 +170,22 @@ rtk gh run view "$FORK_BUILD_RUN_ID"
 
 Expected: build jobs are scheduled for all five Rust targets plus DEB and RPM.
 
-- [ ] **Step 4: Restore the working branch**
+- [ ] **Step 4: Wait for completion and verify artifacts**
+
+Run:
+
+```bash
+rtk gh run watch "$FORK_BUILD_RUN_ID" --exit-status
+rtk gh run view "$FORK_BUILD_RUN_ID" --json jobs,headSha,conclusion
+rtk gh run download "$FORK_BUILD_RUN_ID" --dir /tmp/rtk-fork-build-artifacts
+rtk find /tmp/rtk-fork-build-artifacts -maxdepth 2 -type f
+```
+
+Expected: the run succeeds, all five matrix builds plus DEB and RPM complete,
+the recorded source SHA matches the intended `source_ref`, and all seven
+artifacts are present.
+
+- [ ] **Step 5: Restore the working branch**
 
 Run:
 

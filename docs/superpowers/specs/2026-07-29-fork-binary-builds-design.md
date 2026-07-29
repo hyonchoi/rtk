@@ -8,9 +8,10 @@ upstream release process.
 
 ## Workflow
 
-Add `.github/workflows/build-binaries.yml` with a `workflow_dispatch` trigger.
-The operator selects the source revision through GitHub's workflow branch
-selector or `gh workflow run --ref`.
+Add `.github/workflows/build-binaries.yml` with a `workflow_dispatch` trigger
+and a required `source_ref` input. The operator dispatches from a branch that
+contains the workflow, then selects the branch, tag, or commit to build through
+`source_ref`.
 
 The workflow uses the same target matrix and packaging conventions as
 `.github/workflows/release.yml`:
@@ -38,8 +39,9 @@ The workflow has read-only repository permissions and does not:
 - update Homebrew;
 - require GitHub App or upstream repository secrets.
 
-Fork telemetry variables remain optional. An unset repository variable or
-secret produces an empty build-time value, matching GitHub Actions semantics.
+Fork telemetry remains optional. The build receives only the public repository
+variable `RTK_TELEMETRY_URL`; repository secrets are deliberately withheld
+because the selected `source_ref` can run arbitrary build scripts.
 
 ## Failure Behavior
 
@@ -50,5 +52,7 @@ The workflow run reports failure when any required target or package job fails.
 ## Verification
 
 Validate the workflow syntax locally where tooling permits, push it to the
-fork's default branch so GitHub exposes `workflow_dispatch`, trigger it against
-`feat/codex-hook`, and confirm that all seven build jobs are scheduled.
+fork's default branch so GitHub exposes `workflow_dispatch`, dispatch from that
+branch with `source_ref=feat/codex-hook`, wait for completion, confirm that all
+seven build jobs succeeded, record the checked-out source SHA, and verify that
+all seven artifacts were uploaded.
