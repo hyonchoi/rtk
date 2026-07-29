@@ -5,6 +5,19 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.5](https://github.com/rtk-ai/rtk/compare/v0.42.4...v0.42.5) (2026-07-29)
+
+### Added
+
+* Configure Codex CLI with a native `rtk hook codex` PreToolUse hook so Codex commands can be rewritten through RTK automatically.
+* Document Codex hook setup across the agent support guide, hook docs, and contribution notes.
+
+### Fixed
+
+* Keep Codex hook rewrites within Codex's supported permission shape by emitting `allow` decisions only when every command segment is safe to auto-run.
+* Detect Codex hook installation independently from Claude hook entries, avoiding false "already installed" results.
+* Support project-local Codex uninstall by removing `.codex/hooks.json` entries, `RTK.md`, and `AGENTS.md` references.
+
 ## [0.42.4](https://github.com/rtk-ai/rtk/compare/v0.42.3...v0.42.4) (2026-06-12)
 
 
