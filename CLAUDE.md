@@ -16,7 +16,7 @@ This is a fork with critical fixes for git argument parsing and modern JavaScrip
 
 **Verify correct installation:**
 ```bash
-rtk --version  # Should show "rtk 0.28.2" (or newer)
+rtk --version  # Should show "rtk 0.42.6" (or newer)
 rtk gain       # Should show token savings stats (NOT "command not found")
 ```
 
@@ -64,6 +64,13 @@ cargo fmt --all && cargo clippy --all-targets && cargo test --all
 cargo deb                     # DEB package (needs cargo-deb)
 cargo generate-rpm            # RPM package (needs cargo-generate-rpm, after release build)
 ```
+
+### Fork Binary Workflow
+```bash
+gh workflow run build-binaries.yml --ref develop -f source_ref=<branch-tag-or-sha>
+```
+
+Use `.github/workflows/build-binaries.yml` for artifact-only fork builds. Dispatch from a branch that contains the workflow, usually `develop`, and select the source revision through the required `source_ref` input. The workflow builds five platform archives plus DEB and RPM packages, records the checked-out source revision in every job, disables persisted checkout credentials, and does not receive repository secrets for the selected source.
 
 ## Architecture
 

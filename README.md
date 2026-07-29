@@ -99,10 +99,20 @@ Download from [releases](https://github.com/rtk-ai/rtk/releases):
 
 > **Windows users**: Extract the zip and place `rtk.exe` somewhere in your PATH (e.g. `C:\Users\<you>\.local\bin`). Run RTK from **Command Prompt**, **PowerShell**, or **Windows Terminal** — do not double-click the `.exe` (it will flash and close). The full hook system works natively on Windows (and in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)). See [Windows setup](#windows) below for details.
 
+### Maintainer Fork Builds
+
+Maintainers can build fork binaries without creating a release by manually running the `Build Fork Binaries` workflow from a branch that already contains `.github/workflows/build-binaries.yml`:
+
+```bash
+gh workflow run build-binaries.yml --ref develop -f source_ref=<branch-tag-or-sha>
+```
+
+The workflow builds five platform archives plus DEB and RPM artifacts. It resolves `source_ref` once to an immutable commit SHA, checks out that SHA with persisted credentials disabled, and withholds repository secrets from the selected source revision.
+
 ### Verify Installation
 
 ```bash
-rtk --version   # Should show "rtk 0.28.2"
+rtk --version   # Should show "rtk 0.42.6"
 rtk gain        # Should show the savings dashboard
 ```
 
@@ -442,6 +452,7 @@ brew uninstall rtk           # If installed via Homebrew
 - **[ARCHITECTURE.md](docs/contributing/ARCHITECTURE.md)** — system design and technical decisions
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — contribution guide
 - **[SECURITY.md](SECURITY.md)** — security policy
+- **[Fork binary build plan](docs/superpowers/plans/2026-07-29-fork-binary-builds.md)** — maintainer workflow for artifact-only fork builds
 
 ## Privacy & Telemetry
 
