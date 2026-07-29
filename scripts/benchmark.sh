@@ -12,6 +12,15 @@ else
 fi
 BENCH_DIR="$(pwd)/scripts/benchmark"
 RTK_ROOT="$(pwd)"
+BENCH_FIXTURE_DIR=""
+
+cleanup() {
+  if [ -n "$BENCH_FIXTURE_DIR" ]; then
+    rm -rf "$BENCH_FIXTURE_DIR"
+  fi
+}
+
+trap cleanup EXIT
 
 if [ -z "$CI" ]; then
   rm -rf "$BENCH_DIR"
@@ -346,8 +355,12 @@ bench "wc" "wc Cargo.toml src/main.rs" "$RTK wc Cargo.toml src/main.rs"
 # ===================
 section "curl"
 if command -v curl &> /dev/null; then
-  bench "curl json" "curl -s https://mockhttp.org/json/1" "$RTK curl https://mockhttp.org/json/1"
-  bench "curl text" "curl -s https://mockhttp.org/robots.txt" "$RTK curl https://mockhttp.org/robots.txt"
+  BENCH_FIXTURE_DIR="$(mktemp -d)"
+  printf '{"message":"Hello from RTK benchmark","status":"success","code":200}\n' > "$BENCH_FIXTURE_DIR/json-1.json"
+  printf 'User-agent: *\nDisallow:\n' > "$BENCH_FIXTURE_DIR/robots.txt"
+
+  bench "curl json" "curl -s file://$BENCH_FIXTURE_DIR/json-1.json" "$RTK curl file://$BENCH_FIXTURE_DIR/json-1.json"
+  bench "curl text" "curl -s file://$BENCH_FIXTURE_DIR/robots.txt" "$RTK curl file://$BENCH_FIXTURE_DIR/robots.txt"
 fi
 
 # ===================

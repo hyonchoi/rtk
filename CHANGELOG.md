@@ -5,6 +5,18 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.6](https://github.com/rtk-ai/rtk/compare/v0.42.5...v0.42.6) (2026-07-29)
+
+### Added
+
+* Add an on-demand fork binary build workflow for five target binaries plus DEB and RPM packages.
+* Document the fork binary build workflow plan, dispatch path, artifact checks, and source revision verification.
+
+### Fixed
+
+* Keep arbitrary `source_ref` builds from receiving repository secrets or persisted checkout credentials.
+* Make fork build verification use the dispatch branch run and the workflow's recorded source revision instead of GitHub's dispatch `headSha`.
+
 ## [0.42.5](https://github.com/rtk-ai/rtk/compare/v0.42.4...v0.42.5) (2026-07-29)
 
 ### Added
