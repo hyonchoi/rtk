@@ -41,7 +41,9 @@ The workflow has read-only repository permissions and does not:
 
 Fork telemetry remains optional. The build receives only the public repository
 variable `RTK_TELEMETRY_URL`; repository secrets are deliberately withheld
-because the selected `source_ref` can run arbitrary build scripts.
+because the selected `source_ref` can run arbitrary build scripts. Checkout also
+disables persisted Git credentials so selected source code cannot reuse the
+workflow token after checkout.
 
 ## Failure Behavior
 
@@ -54,5 +56,7 @@ The workflow run reports failure when any required target or package job fails.
 Validate the workflow syntax locally where tooling permits, push it to the
 fork's default branch so GitHub exposes `workflow_dispatch`, dispatch from that
 branch with `source_ref=feat/codex-hook`, wait for completion, confirm that all
-seven build jobs succeeded, record the checked-out source SHA, and verify that
-all seven artifacts were uploaded.
+seven build jobs succeeded, confirm each job's `Record source revision` step
+printed the checked-out source SHA, and verify that all seven artifacts were
+uploaded. GitHub's run `headSha` identifies the dispatch branch, not the
+selected `source_ref`.

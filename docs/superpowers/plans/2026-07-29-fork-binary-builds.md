@@ -56,19 +56,20 @@ jobs, including target setup, release builds, archive creation, and
 Run:
 
 ```bash
-rtk rg -n "workflow_dispatch|source_ref|contents: read|target:|Upload artifact|Upload DEB|Upload RPM|RTK_TELEMETRY_TOKEN|action-gh-release|create-github-app-token" .github/workflows/build-binaries.yml
+rtk rg -n "workflow_dispatch|source_ref|contents: read|persist-credentials: false|target:|Upload artifact|Upload DEB|Upload RPM|RTK_TELEMETRY_TOKEN|action-gh-release|create-github-app-token" .github/workflows/build-binaries.yml
 ```
 
 Expected: the trigger, required `source_ref` input, read permission, five Rust
 targets, and three upload step names are present; `action-gh-release`,
-`create-github-app-token`, and `RTK_TELEMETRY_TOKEN` are absent.
+`create-github-app-token`, and `RTK_TELEMETRY_TOKEN` are absent; every checkout
+uses `persist-credentials: false`.
 
 - [ ] **Step 3: Parse the workflow**
 
 Run:
 
 ```bash
-rtk ruby -e 'require "yaml"; YAML.load_file(".github/workflows/build-binaries.yml", aliases: true); puts "workflow yaml: ok"'
+rtk ruby -e 'require "yaml"; YAML.load(File.read(".github/workflows/build-binaries.yml")); puts "workflow yaml: ok"'
 ```
 
 Expected: `workflow yaml: ok`.
@@ -98,13 +99,16 @@ rtk git commit -m "Add fork binary build workflow"
 Run:
 
 ```bash
-FORK_WORKFLOW_COMMIT=$(rtk git rev-parse HEAD)
+FORK_WORKFLOW_COMMIT=$(rtk git log --format=%H --max-count=1 -- .github/workflows/build-binaries.yml)
 test -n "$FORK_WORKFLOW_COMMIT"
 rtk git status --short --branch
 rtk git fetch origin develop
 ```
 
-Expected: the feature branch is clean and `origin/develop` is available.
+Expected: the workflow-specific commit is recorded and `origin/develop` is
+available. If later hardening changes also modify `.github/workflows/build-binaries.yml`,
+record that latest workflow commit instead of assuming the current branch `HEAD`
+is workflow-only.
 
 - [ ] **Step 2: Update local develop and cherry-pick the workflow commit**
 
@@ -154,7 +158,7 @@ Expected: GitHub accepts the dispatch. Dispatching with
 Run:
 
 ```bash
-FORK_BUILD_RUN_ID=$(rtk gh run list --workflow build-binaries.yml --branch feat/codex-hook --limit 1 --json databaseId --jq '.[0].databaseId')
+FORK_BUILD_RUN_ID=$(rtk gh run list --workflow build-binaries.yml --branch develop --limit 1 --json databaseId --jq '.[0].databaseId')
 test -n "$FORK_BUILD_RUN_ID"
 ```
 
@@ -176,14 +180,16 @@ Run:
 
 ```bash
 rtk gh run watch "$FORK_BUILD_RUN_ID" --exit-status
-rtk gh run view "$FORK_BUILD_RUN_ID" --json jobs,headSha,conclusion
+rtk gh run view "$FORK_BUILD_RUN_ID" --json jobs,headBranch,headSha,conclusion
 rtk gh run download "$FORK_BUILD_RUN_ID" --dir /tmp/rtk-fork-build-artifacts
 rtk find /tmp/rtk-fork-build-artifacts -maxdepth 2 -type f
 ```
 
 Expected: the run succeeds, all five matrix builds plus DEB and RPM complete,
-the recorded source SHA matches the intended `source_ref`, and all seven
-artifacts are present.
+the `Record source revision` step in every job prints the resolved source SHA
+for the selected `source_ref`, and all seven artifacts are present. The GitHub
+run `headSha` identifies the dispatch branch, not necessarily the selected
+`source_ref`, so do not use `headSha` as proof of the source revision.
 
 - [ ] **Step 5: Restore the working branch**
 
